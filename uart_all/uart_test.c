@@ -7,6 +7,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include<time.h>  //getSystemTimer
+#include<sys/time.h>
+#include <sys/timeb.h>
+
 #define SENDBLOCKSIZE 128
 
 static  struct termios termold[7],termnew[7];
@@ -23,6 +27,40 @@ static  long unsigned int rxtotal[7]={0};
 static  long unsigned int txtotal[7]={0};
 static  long unsigned int faillen[7]={0};
 static  int fd[7]={0};
+//gettime from system
+
+void getSystemTimer(void)
+{
+#if 0
+	char *wdate[]={"Sun","Mon","Tue","Wed","Thu","Fri","Sat"} ;
+	time_t timep;
+	struct tm *p;
+	time(&timep);
+	p=gmtime(&timep);
+    printf("\n************************* %d:%d:%d **************************\n", p->tm_hour, p->tm_min, p->tm_sec);
+#endif
+    struct timeb timebuffer;  //get ms
+	static long  oldsecond ;  long msecond = 0 ;
+ 
+    static char flag=0;
+	static long lastsecond = 0 ;   //old
+	long timeoffset = 0 ;          //now
+	struct timeval tv;
+	struct timezone tz;
+	
+	gettimeofday(&tv,&tz);
+	if(flag==0){
+	  lastsecond = tv.tv_sec ;
+	  flag = 1 ;
+	}
+	timeoffset = tv.tv_sec - lastsecond ; //get offsettime
+	//ms
+	ftime(&timebuffer);  
+    msecond = (tv.tv_sec-oldsecond)*1000 + timebuffer.millitm ;
+	oldsecond = tv.tv_sec ;
+	
+	printf("\n************************ %d:%d:%d  %1.1fKb/S*************************\n",(timeoffset/60)/60,(timeoffset/60)%60,timeoffset%60,49000.0/msecond) ;
+}
 //uart configration
 void uart_config(void)
 {
@@ -31,7 +69,7 @@ void uart_config(void)
 	  tcgetattr(fd[i],&termold[i]);
 	  tcgetattr(fd[i],&termnew[i]);
 	  cfmakeraw(&termnew[i]);
-	  cfsetspeed(&termnew[i],B115200);  //{115200,460800,921600}
+	  cfsetspeed(&termnew[i],115200);  //{115200,460800,921600}
 	  tcsetattr(fd[i],TCSANOW,&termnew[i]);
 	}
 }
@@ -55,14 +93,16 @@ void print_result(void)
 	double fail=0.0;
 	double all=0.0;
 	char i=0;
-	printf("\n**************************B115200**************************\n");
+	//printf("\n**************************B115200**************************\n");
+	getSystemTimer() ;
 	for(i=1;i<7;i++){
 	  fail = faillen[i];  
 	  all = rxtotal[i]/10; //pack
 	  printf("==ttyO%d:-Tx %ld ==\n",i,txtotal[i]/10) ;
 	  printf("         Rx %ld     success:%ld    fail:%ld    %1.1f %==\n",rxtotal[i]/10,(rxtotal[i]-faillen[i])/10,faillen[i],(1-fail/all)*100) ;
 	}
-	  printf("***********************************************************\n");
+	printf("*****************************************************************\n");
+	  
 }
 int main(int argc,char* argv[])
 {
@@ -122,7 +162,7 @@ int main(int argc,char* argv[])
 	    }
 
 		//print per 5000bits
-		if(!(txtotal[1]%5000)){
+		if(!(txtotal[1]%5000)){            //5000*10 = 48.4K
            print_result() ;  //show
 		}
 	}
